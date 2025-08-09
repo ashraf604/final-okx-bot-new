@@ -1,85 +1,35 @@
+// database.js - MongoDB Connection
+const { MongoClient } = require('mongodb');
+require('dotenv').config();
 
-// database.js - Local JSON file storage instead of PostgreSQL
-const fs = require('fs').promises;
-const path = require('path');
+// سيقرأ هذا الرابط من الـ Secrets الخاصة بك
+const uri = process.env.MONGO_URI; 
+if (!uri) {
+    throw new Error('MONGO_URI not found in environment variables. Please add it to your secrets.');
+}
 
-const DATA_DIR = path.join(__dirname, 'data');
-const DATA_FILES = {
-    settings: path.join(DATA_DIR, 'settings.json'),
-    capital: path.join(DATA_DIR, 'capital.json'),
-    alerts: path.join(DATA_DIR, 'alerts.json'),
-    alertSettings: path.join(DATA_DIR, 'alertSettings.json'),
-    history: path.join(DATA_DIR, 'history.json'),
-    hourlyHistory: path.join(DATA_DIR, 'hourlyHistory.json'),
-    positions: path.join(DATA_DIR, 'positions.json'),
-    balanceState: path.join(DATA_DIR, 'balanceState.json'),
-    closedTrades: path.join(DATA_DIR, 'closedTrades.json')
-};
+const client = new MongoClient(uri);
+
+let db;
 
 async function connectDB() {
     try {
-        // Create data directory if it doesn't exist
-        await fs.mkdir(DATA_DIR, { recursive: true });
-        
-        // Initialize default files if they don't exist
-        for (const [key, filePath] of Object.entries(DATA_FILES)) {
-            try {
-                await fs.access(filePath);
-            } catch {
-                // File doesn't exist, create with default data
-                let defaultData = {};
-                if (key === 'settings') {
-                    defaultData = { dailySummary: false, autoPostToChannel: false, debugMode: false };
-                } else if (key === 'capital') {
-                    defaultData = { amount: 0 };
-                } else if (key === 'alerts') {
-                    defaultData = { alerts: [] };
-                } else if (key === 'alertSettings') {
-                    defaultData = { global: 5, overrides: {} };
-                } else if (key === 'history' || key === 'hourlyHistory' || key === 'closedTrades') {
-                    defaultData = [];
-                } else if (key === 'positions') {
-                    defaultData = { positions: {} };
-                } else if (key === 'balanceState') {
-                    defaultData = { balances: {}, totalValue: 0 };
-                }
-                
-                await fs.writeFile(filePath, JSON.stringify(defaultData, null, 2));
-            }
-        }
-        
-        console.log("Successfully initialized local file storage.");
+        await client.connect();
+        // يمكنك تغيير اسم قاعدة البيانات "okx_bot_db" إلى أي اسم تريده
+        db = client.db("okx_bot_db"); 
+        console.log("Successfully connected to MongoDB Atlas!");
         return true;
     } catch (e) {
-        console.error("Failed to initialize local storage", e);
+        console.error("Failed to connect to MongoDB", e);
         process.exit(1);
     }
 }
 
-async function readJSONFile(filePath, defaultValue = {}) {
-    try {
-        const data = await fs.readFile(filePath, 'utf8');
-        return JSON.parse(data);
-    } catch (e) {
-        return defaultValue;
+const getDB = () => {
+    if (!db) {
+        throw new Error("Database not initialized. Call connectDB first.");
     }
-}
-
-async function writeJSONFile(filePath, data) {
-    try {
-        await fs.writeFile(filePath, JSON.stringify(data, null, 2));
-    } catch (e) {
-        console.error(`Error writing to ${filePath}:`, e);
-    }
-}
-
-const getDB = () => ({
-    readFile: readJSONFile,
-    writeFile: writeJSONFile,
-    files: DATA_FILES
-});
-
-module.exports = { 
-    connectDB, 
-    getDB
+    return db;
 };
+
+module.exports = { connectDB, getDB };
